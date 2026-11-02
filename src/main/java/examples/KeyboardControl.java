@@ -1,6 +1,6 @@
 package examples;
 
-import com.javiergs.turtle4j.TurtleClient;
+import com.javiergs.turtle4j.RosbridgeConnection;
 import javax.swing.AbstractAction;
 import javax.swing.JFrame;
 import javax.swing.JLabel;
@@ -26,16 +26,14 @@ import java.util.Set;
  * @version 1.0 (2026-10-26)
  */
 public class KeyboardControl {
-    private static final double LINEAR = 1.0;
-    private static final double ANGULAR = 1.0;
+    private static final double LINEAR = 0.05;
+    private static final double ANGULAR = 0.2;
+    private static final String TOPIC = "/cmd_vel_unstamped";
 
     public static void main(String[] args) throws Exception {
-        TurtleClient client = new TurtleClient(ExampleSupport.ENDPOINT);
+      RosbridgeConnection client = new RosbridgeConnection("ws://192.168.185.3:9090");
         try {
-            if (!ExampleSupport.requireVelocity(client.connect())) {
-                client.close();
-                return;
-            }
+            client.connect();
             javax.swing.SwingUtilities.invokeAndWait(() -> openWindow(client));
         } catch (Exception ex) {
             client.close();
@@ -43,7 +41,15 @@ public class KeyboardControl {
         }
     }
 
-    private static void openWindow(TurtleClient client) {
+    private static void stopQuietly(RosbridgeConnection client) {
+      try {
+          VelocityCommands.stop(client, TOPIC);
+      } catch (RuntimeException ex) {
+          System.err.println("Stop command failed: " + ex.getMessage());
+      }
+    }
+
+    private static void openWindow(RosbridgeConnection client) {
         JFrame frame = new JFrame("TURTLE4J — Keyboard Control");
         JPanel panel = new JPanel(new BorderLayout());
         JLabel label = new JLabel("<html><center>↑ Forward &nbsp; ↓ Backward<br>"
@@ -75,7 +81,7 @@ public class KeyboardControl {
         panel.getActionMap().put("stop", new AbstractAction() {
             @Override public void actionPerformed(ActionEvent event) {
                 held.clear();
-                ExampleSupport.stopQuietly(client);
+                stopQuietly(client);
             }
         });
 
@@ -87,25 +93,25 @@ public class KeyboardControl {
             double angular = (held.contains("LEFT") ? ANGULAR : 0.0)
                     - (held.contains("RIGHT") ? ANGULAR : 0.0);
             try {
-                client.setVelocity(linear, angular);
+                VelocityCommands.move(client, TOPIC, linear, angular);
             } catch (RuntimeException ex) {
                 ((Timer) event.getSource()).stop();
                 held.clear();
-                ExampleSupport.stopQuietly(client);
+                stopQuietly(client);
                 label.setText("Velocity command failed: " + ex.getMessage());
             }
         });
         frame.addWindowFocusListener(new WindowAdapter() {
             @Override public void windowLostFocus(WindowEvent event) {
                 held.clear();
-                ExampleSupport.stopQuietly(client);
+                stopQuietly(client);
             }
         });
         frame.addWindowListener(new WindowAdapter() {
             @Override public void windowClosed(WindowEvent event) {
                 timer.stop();
                 held.clear();
-                ExampleSupport.stopQuietly(client);
+                stopQuietly(client);
                 client.close();
             }
         });
